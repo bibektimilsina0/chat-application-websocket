@@ -2,8 +2,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from .config import Config
-from .extensions import db, jwt, socketio
-
+from .extensions import db, jwt, migrate, socketio
 
 def create_app(config=Config):
     app = Flask(__name__)
@@ -11,6 +10,7 @@ def create_app(config=Config):
 
     CORS(app)
     db.init_app(app)
+    migrate.init_app(app, db)
     jwt.init_app(app)
     socketio.init_app(app)
 
@@ -30,4 +30,7 @@ def create_app(config=Config):
     def expired_token(header, payload):
         return jsonify(error="Token expired"), 401
 
+    from . import models  # noqa: F401  (registers tables with SQLAlchemy)
+    from .routes.auth import bp as auth_bp
+    app.register_blueprint(auth_bp)
     return app
