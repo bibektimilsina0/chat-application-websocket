@@ -1,0 +1,10 @@
+flask
+flask-cors
+flask-sqlalchemy
+flask-jwt-extended
+flask-socketio
+simple-websocket
+psycopg2-binary
+cassandra-driver
+python-dotenv
+pytest
