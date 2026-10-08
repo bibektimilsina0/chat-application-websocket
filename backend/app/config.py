@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-
+from datetime import timedelta
 load_dotenv()
 
 
@@ -11,6 +11,17 @@ class Config:
         "DATABASE_URL", "postgresql+psycopg://chat:chat@localhost:5432/chat"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    JWT_TOKEN_LOCATION = ["cookies"]
+    JWT_ACCESS_COOKIE_NAME = "access_token"
+    JWT_ACCESS_COOKIE_PATH = "/"
+    JWT_REFRESH_COOKIE_NAME = "refresh_token"
+    JWT_REFRESH_COOKIE_PATH = "/"         
+    JWT_SESSION_COOKIE = False             # cookie lifetime = token lifetime
+    JWT_COOKIE_SECURE = False              # True in production (HTTPS)
+    JWT_COOKIE_SAMESITE = "Lax"
+    JWT_COOKIE_CSRF_PROTECT = False  
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)
 
 
 class TestConfig(Config):

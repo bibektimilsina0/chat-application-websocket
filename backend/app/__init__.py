@@ -8,10 +8,12 @@ def create_app(config=Config):
     app = Flask(__name__)
     app.config.from_object(config)
 
-    CORS(app)
+    CORS(app, supports_credentials=True, origins=["http://localhost:4200"])
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    from .middleware import register_auth_middleware
+    register_auth_middleware(app)
     socketio.init_app(app)
 
     @app.get("/health")

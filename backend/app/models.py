@@ -41,3 +41,4 @@ class RefreshToken(db.Model):
     expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
     revoked = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+    revoked_at = db.Column(db.DateTime(timezone=True), nullable=True)
