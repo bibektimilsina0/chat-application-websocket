@@ -35,4 +35,6 @@ def create_app(config=Config):
     from . import models  # noqa: F401  (registers tables with SQLAlchemy)
     from .routes.auth import bp as auth_bp
     app.register_blueprint(auth_bp)
+    from .routes.rooms import bp as rooms_bp
+    app.register_blueprint(rooms_bp)
     return app
