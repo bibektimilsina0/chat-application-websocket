@@ -23,6 +23,10 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)
 
+    # cassandra config
+    CASSANDRA_HOSTS = os.getenv("CASSANDRA_HOSTS", "127.0.0.1").split(",")
+    CASSANDRA_PORT = int(os.getenv("CASSANDRA_PORT", "9042"))
+    CASSANDRA_KEYSPACE = os.getenv("CASSANDRA_KEYSPACE", "chat")
 
 class TestConfig(Config):
     TESTING = True

@@ -4,7 +4,7 @@ from flask_cors import CORS
 from .config import Config
 from .extensions import db, jwt, migrate, socketio
 
-def create_app(config=Config):
+def create_app(config=Config,message_store=None):
     app = Flask(__name__)
     app.config.from_object(config)
 
@@ -16,6 +16,14 @@ def create_app(config=Config):
     register_auth_middleware(app)
     socketio.init_app(app)
 
+    from .message_store import CassandraMessageStore
+
+    app.extensions["message_store"] = message_store or CassandraMessageStore(
+        app.config["CASSANDRA_HOSTS"],
+        app.config["CASSANDRA_PORT"],
+        app.config["CASSANDRA_KEYSPACE"],
+    )
+    
     @app.get("/health")
     def health():
         return {"status": "ok"}
@@ -37,4 +45,6 @@ def create_app(config=Config):
     app.register_blueprint(auth_bp)
     from .routes.rooms import bp as rooms_bp
     app.register_blueprint(rooms_bp)
+
+    from . import sockets  # noqa: F401  (registers Socket.IO event handlers)
     return app

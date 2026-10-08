@@ -5,6 +5,9 @@ from sqlalchemy.exc import IntegrityError
 
 from ..extensions import db
 from ..models import Membership, Room
+from uuid import UUID
+
+from flask import Blueprint, current_app, jsonify, request
 
 bp = Blueprint("rooms", __name__, url_prefix="/rooms")
 
@@ -80,3 +83,29 @@ def join_room_rest(room_id):
 
     count = Membership.query.filter_by(room_id=room_id).count()
     return jsonify(_room_json(room, count, True))
+
+@bp.get("/<int:room_id>/messages")
+@jwt_required()
+def room_messages(room_id):
+    uid = int(get_jwt_identity())
+    if not Membership.query.filter_by(user_id=uid, room_id=room_id).first():
+        return jsonify(error="Join the room first"), 403
+
+    try:
+        limit = max(1, min(int(request.args.get("limit", 30)), 100))
+    except ValueError:
+        return jsonify(error="limit must be a number"), 400
+
+    before = None
+    if request.args.get("before"):
+        try:
+            before = UUID(request.args["before"])
+        except ValueError:
+            return jsonify(error="before must be a message_id"), 400
+
+    store = current_app.extensions["message_store"]
+    try:
+        return jsonify(store.history(room_id, limit, before))
+    except Exception:
+        current_app.logger.exception("Message store unavailable")
+        return jsonify(error="Message history is temporarily unavailable"), 503
