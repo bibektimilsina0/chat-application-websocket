@@ -1,4 +1,4 @@
-from .helpers import create_room
+from .helpers import connect, create_room, received
 
 
 def test_rooms_require_login(client):
@@ -83,3 +83,20 @@ def test_history_rejects_bad_parameters(alice):
     room_id = create_room(alice).get_json()["id"]
     assert alice.get(f"/rooms/{room_id}/messages?limit=abc").status_code == 400
     assert alice.get(f"/rooms/{room_id}/messages?before=not-a-uuid").status_code == 400
+
+def test_first_join_posts_a_system_message_once(alice, bob):
+    room_id = create_room(alice).get_json()["id"]
+    bob.post(f"/rooms/{room_id}/join")
+    bob.post(f"/rooms/{room_id}/join")  # opening the room again must not repeat it
+
+    msgs = alice.get(f"/rooms/{room_id}/messages").get_json()
+    assert [(m["kind"], m["content"]) for m in msgs] == [("system", "bob joined the room")]
+
+
+def test_new_rooms_are_broadcast_to_connected_users(app, alice, bob):
+    sc = connect(app, bob)
+    sc.get_received()
+    create_room(alice, "fresh")
+
+    events = received(sc, "room_changed")
+    assert events and events[0]["name"] == "fresh"

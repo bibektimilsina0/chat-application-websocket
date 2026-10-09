@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, effect, inject, signal } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
 import { io } from 'socket.io-client';
 import { API_URL } from './config';
@@ -20,6 +20,10 @@ export class SocketService {
   private authRetried = false;
 
   constructor() {
+        // Logged out (by button, or because the session died) -> close the socket
+    effect(() => {
+      if (!this.auth.user()) this.socket.disconnect();
+    });
     this.socket.on('connect', () => {
       this.connected.set(true);
       this.authRetried = false;

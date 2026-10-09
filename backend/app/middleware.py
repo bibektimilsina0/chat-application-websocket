@@ -65,8 +65,8 @@ def _attach_cookies(response):
         set_auth_cookies(response, *new_tokens)
     elif g.get("clear_auth_cookies"):
         unset_jwt_cookies(response)
+    response.headers.setdefault("Cache-Control", "no-store")  # never cache API data
     return response
-
 
 def register_auth_middleware(app):
     app.before_request(_require_csrf_header)  # runs first

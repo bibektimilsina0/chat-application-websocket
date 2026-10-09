@@ -6,13 +6,14 @@ class InMemoryMessageStore:
     def __init__(self):
         self._rooms = {}
 
-    def add(self, room_id, user_id, username, content):
+    def add(self, room_id, user_id, username, content, kind="message"):
         message = {
             "message_id": str(uuid.uuid1()),
             "room_id": room_id,
             "user_id": user_id,
             "username": username,
             "content": content,
+            "kind": kind,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self._rooms.setdefault(room_id, []).append(message)

@@ -5,13 +5,26 @@
   <button mat-button (click)="auth.logout()">Logout</button>
 </mat-toolbar>
 
+@if (loading() || creating()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
 <main class="wrap">
   <form class="create" (ngSubmit)="create()">
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>New room name</mat-label>
-      <input matInput name="roomName" maxlength="80" [ngModel]="newName()" (ngModelChange)="newName.set($event)" />
+      <input
+        matInput
+        name="roomName"
+        maxlength="80"
+        [disabled]="creating()"
+        [ngModel]="newName()"
+        (ngModelChange)="newName.set($event)"
+      />
     </mat-form-field>
-    <button mat-flat-button type="submit" [disabled]="!newName().trim() || creating()">Create</button>
+    <button mat-flat-button type="submit" [disabled]="!newName().trim() || creating()">
+      {{ creating() ? 'Creating…' : 'Create' }}
+    </button>
   </form>
 
   @if (loading()) {

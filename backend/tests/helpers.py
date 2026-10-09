@@ -35,3 +35,8 @@ def call(sc, event, data):
 def received(sc, name):
     """Pop all pending events of one type, returning just their payloads."""
     return [e["args"][0] for e in sc.get_received() if e["name"] == name]
+
+def chat_messages(app, room_id):
+    """Stored messages without system notices like 'bob joined'."""
+    store = app.extensions["message_store"]
+    return [m for m in store.history(room_id) if m["kind"] == "message"]

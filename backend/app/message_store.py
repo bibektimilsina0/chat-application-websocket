@@ -1,9 +1,9 @@
 import threading
-from datetime import timezone
+from datetime import datetime, timezone
 
+from cassandra import InvalidRequest
 from cassandra.cluster import Cluster
 from cassandra.util import datetime_from_uuid1, uuid_from_time
-from datetime import datetime
 
 
 def _created_at(message_id):
@@ -41,21 +41,26 @@ class CassandraMessageStore:
                     user_id int,
                     username text,
                     content text,
+                    kind text,
                     PRIMARY KEY ((room_id), message_id)
                 ) WITH CLUSTERING ORDER BY (message_id DESC)
                 """
             )
+            try:  # tables created before `kind` existed
+                session.execute("ALTER TABLE messages ADD kind text")
+            except InvalidRequest:
+                pass  # column already there
+
             self._insert = session.prepare(
-                "INSERT INTO messages (room_id, message_id, user_id, username, content) "
-                "VALUES (?, ?, ?, ?, ?)"
+                "INSERT INTO messages (room_id, message_id, user_id, username, content, kind) "
+                "VALUES (?, ?, ?, ?, ?, ?)"
             )
+            cols = "room_id, message_id, user_id, username, content, kind"
             self._latest = session.prepare(
-                "SELECT room_id, message_id, user_id, username, content "
-                "FROM messages WHERE room_id = ? LIMIT ?"
+                f"SELECT {cols} FROM messages WHERE room_id = ? LIMIT ?"
             )
             self._older = session.prepare(
-                "SELECT room_id, message_id, user_id, username, content "
-                "FROM messages WHERE room_id = ? AND message_id < ? LIMIT ?"
+                f"SELECT {cols} FROM messages WHERE room_id = ? AND message_id < ? LIMIT ?"
             )
             self._session = session
 
@@ -67,14 +72,15 @@ class CassandraMessageStore:
             "user_id": row.user_id,
             "username": row.username,
             "content": row.content,
+            "kind": row.kind or "message",  # old rows have no kind
             "created_at": _created_at(row.message_id),
         }
 
-    def add(self, room_id, user_id, username, content):
+    def add(self, room_id, user_id, username, content, kind="message"):
         self._ensure()
         message_id = uuid_from_time(datetime.now(timezone.utc))
         self._session.execute(
-            self._insert, (room_id, message_id, user_id, username, content)
+            self._insert, (room_id, message_id, user_id, username, content, kind)
         )
         return {
             "message_id": str(message_id),
@@ -82,6 +88,7 @@ class CassandraMessageStore:
             "user_id": user_id,
             "username": username,
             "content": content,
+            "kind": kind,
             "created_at": _created_at(message_id),
         }
 

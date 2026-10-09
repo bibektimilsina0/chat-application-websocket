@@ -14,6 +14,7 @@ import { RoomService } from '../../core/room.service';
 import { MessageService } from '../../core/message.service';
 import { SocketService } from '../../core/socket.service';
 import { ChatMessage, PresenceEvent, PresenceUser, TypingEvent } from '../../core/models';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 const PAGE_SIZE = 30;
 const TYPING_STOP_MS = 2000; // I stop typing after 2s of silence
@@ -30,7 +31,7 @@ function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]): ChatMes
 
 @Component({
   selector: 'app-chat-room',
-  imports: [DatePipe, FormsModule, MatToolbarModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule],
+  imports: [DatePipe, FormsModule, MatToolbarModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule,MatProgressBarModule],
   templateUrl: './chat-room.html',
   styleUrl: './chat-room.scss',
 })
@@ -57,6 +58,7 @@ export class ChatRoom implements OnInit, OnDestroy {
   noMore = signal(false);
   sending = signal(false);
   draft = signal('');
+  ready = signal(false); 
 
   readonly typingText = computed(() => {
     const names = this.typingUsers();
@@ -104,6 +106,8 @@ export class ChatRoom implements OnInit, OnDestroy {
     } catch {
       this.snack.open('Could not connect to chat', 'OK', { duration: 4000 });
     }
+    // Arrived with the socket already connected: no 'connect' event is coming
+    if (this.socket.connected() && !this.destroyed) await this.enterRoom();
   }
 
   /** Runs on every (re)connect: join the socket room and load what we may have missed. */
@@ -122,8 +126,15 @@ export class ChatRoom implements OnInit, OnDestroy {
         this.noMore.set(latest.length < PAGE_SIZE);
         this.scrollToBottom();
       }
+          if (this.firstLoad) {
+        this.firstLoad = false;
+        this.noMore.set(latest.length < PAGE_SIZE);
+        this.scrollToBottom();
+      }
+      this.ready.set(true);
     } catch {
       this.snack.open('Could not load message history', 'OK', { duration: 4000 });
+      this.ready.set(true);
     }
   }
 
@@ -135,7 +146,11 @@ export class ChatRoom implements OnInit, OnDestroy {
 
     const mine = m.user_id === this.auth.user()?.id;
     this.messages.update((cur) => [...cur, { ...m, isNew: !mine }]);
-
+    if (m.kind === 'system') {
+      this.messages.update((cur) => [...cur, m]);
+      if (this.atBottom) this.scrollToBottom();
+      return;
+    }
     if (mine || this.atBottom) {
       this.scrollToBottom();
       if (!mine) setTimeout(() => this.clearNewFlags(), 3000);
@@ -250,11 +265,13 @@ export class ChatRoom implements OnInit, OnDestroy {
     this.router.navigate(['/rooms']);
   }
 
-  ngOnDestroy() {
+   ngOnDestroy() {
     this.destroyed = true;
     this.subs.unsubscribe();
+    this.stopTyping();
     clearTimeout(this.stopTypingTimer);
     this.remoteTypingTimers.forEach((t) => clearTimeout(t));
-    this.socket.disconnect(); // the server then broadcasts updated presence
+    // Stay connected for the rooms page; just leave this room (updates presence)
+    this.socket.send('leave_room', { room_id: this.roomId });
   }
 }

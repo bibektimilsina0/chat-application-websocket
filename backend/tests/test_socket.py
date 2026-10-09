@@ -3,7 +3,7 @@ import pytest
 from app import sockets
 from app.extensions import socketio
 
-from .helpers import call, connect, create_room, received
+from .helpers import call, chat_messages, connect, create_room, received
 
 
 def joined_room(app, client, room_id):
@@ -121,16 +121,16 @@ def test_message_is_stored_and_served_by_history(app, alice, room_id):
     a = joined_room(app, alice, room_id)
     call(a, "send_message", {"room_id": room_id, "content": "remember me"})
 
-    stored = app.extensions["message_store"].history(room_id)
+    stored = chat_messages(app, room_id)
     assert [m["content"] for m in stored] == ["remember me"]
     api = alice.get(f"/rooms/{room_id}/messages").get_json()
-    assert api[0]["content"] == "remember me"
+    assert [m["content"] for m in api if m["kind"] == "message"] == ["remember me"]
 
 
 def test_message_content_is_trimmed(app, alice, room_id):
     a = joined_room(app, alice, room_id)
     call(a, "send_message", {"room_id": room_id, "content": "  padded  "})
-    assert app.extensions["message_store"].history(room_id)[0]["content"] == "padded"
+    assert chat_messages(app, room_id)[0]["content"] == "padded"
 
 
 @pytest.mark.parametrize("content", ["", "   ", "x" * 2001, None, 5])
@@ -138,7 +138,7 @@ def test_invalid_message_is_rejected(app, alice, room_id, content):
     a = joined_room(app, alice, room_id)
     ack = call(a, "send_message", {"room_id": room_id, "content": content})
     assert ack["ok"] is False
-    assert app.extensions["message_store"].history(room_id) == []
+    assert chat_messages(app, room_id) == []
 
 
 def test_cannot_send_before_joining(app, alice, room_id):

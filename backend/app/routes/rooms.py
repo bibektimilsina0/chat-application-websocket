@@ -3,8 +3,8 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
-from ..extensions import db
-from ..models import Membership, Room
+from ..extensions import db, socketio
+from ..models import Membership, Room, User
 from uuid import UUID
 
 from flask import Blueprint, current_app, jsonify, request
@@ -20,6 +20,22 @@ def _room_json(room, member_count, is_member):
         "is_member": is_member,
     }
 
+def _announce_join(room_id, user):
+    """Store a 'joined' system message and push it to everyone in the room."""
+    try:
+        message = current_app.extensions["message_store"].add(
+            room_id, user.id, user.username, f"{user.username} joined the room", kind="system"
+        )
+    except Exception:  # joining must not fail because message storage is down
+        current_app.logger.exception("Could not store the join message")
+        return
+    socketio.emit("receive_message", message, to=str(room_id))
+
+
+def _broadcast_room(room):
+    """Tell every connected client about a new room or a changed member count."""
+    count = Membership.query.filter_by(room_id=room.id).count()
+    socketio.emit("room_changed", {"id": room.id, "name": room.name, "member_count": count})
 
 @bp.get("")
 @jwt_required()
@@ -62,6 +78,7 @@ def create_room():
         db.session.rollback()
         return jsonify(error="A room with that name already exists"), 409
 
+    _broadcast_room(room)
     return jsonify(_room_json(room, 1, True)), 201
 
 
@@ -74,12 +91,18 @@ def join_room_rest(room_id):
     if room is None:
         return jsonify(error="Room not found"), 404
 
+    added = False
     if not Membership.query.filter_by(user_id=uid, room_id=room_id).first():
         db.session.add(Membership(user_id=uid, room_id=room_id))
         try:
             db.session.commit()
-        except IntegrityError:  # double-click / parallel request
+            added = True
+        except IntegrityError:  # double-click / parallel request: someone else added it
             db.session.rollback()
+
+    if added:  # first time only, so re-opening a room never repeats the message
+        _announce_join(room_id, db.session.get(User, uid))
+        _broadcast_room(room)
 
     count = Membership.query.filter_by(room_id=room_id).count()
     return jsonify(_room_json(room, count, True))

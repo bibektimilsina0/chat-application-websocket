@@ -11,8 +11,15 @@ export interface ChatMessage {
   user_id: number;
   username: string;
   content: string;
+  kind?: 'message' | 'system';
   created_at: string;
-  isNew?: boolean; // UI only: highlight until the user has seen it
+  isNew?: boolean;
+}
+
+export interface RoomChange {
+  id: number;
+  name: string;
+  member_count: number;
 }
 
 export interface PresenceUser {

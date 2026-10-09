@@ -6,7 +6,9 @@
     {{ socket.connected() ? 'Connected' : 'Connecting…' }}
   </span>
 </mat-toolbar>
-
+@if (!ready()) {
+  <mat-progress-bar mode="indeterminate" />
+}
 <div class="layout">
   <section class="chat">
     <div class="messages" #scroller (scroll)="onScroll()" role="log" aria-live="polite">
@@ -16,14 +18,18 @@
         </button>
       }
 
-      @for (m of messages(); track m.message_id) {
-        <div class="msg" [class.mine]="m.user_id === auth.user()?.id" [class.new]="m.isNew">
-          <div class="meta">
-            <strong>{{ m.username }}</strong>
-            <span>{{ m.created_at | date: 'shortTime' }}</span>
+    @for (m of messages(); track m.message_id) {
+        @if (m.kind === 'system') {
+          <div class="system">{{ m.content }}</div>
+        } @else {
+          <div class="msg" [class.mine]="m.user_id === auth.user()?.id" [class.new]="m.isNew">
+            <div class="meta">
+              <strong>{{ m.username }}</strong>
+              <span>{{ m.created_at | date: 'shortTime' }}</span>
+            </div>
+            <div class="content">{{ m.content }}</div>
           </div>
-          <div class="content">{{ m.content }}</div>
-        </div>
+        }
       } @empty {
         @if (noMore()) {
           <p class="empty">No messages yet. Say hello!</p>

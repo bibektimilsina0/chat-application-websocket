@@ -1,4 +1,7 @@
 <mat-card class="auth-card">
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" />
+  }
   <mat-card-header>
     <mat-card-title>{{ mode() === 'login' ? 'Log in' : 'Create account' }}</mat-card-title>
   </mat-card-header>
@@ -26,9 +29,13 @@
       }
 
       <button mat-flat-button type="submit" [disabled]="form.invalid || loading()">
-        {{ mode() === 'login' ? 'Log in' : 'Register' }}
+        @if (loading()) {
+          {{ mode() === 'login' ? 'Logging in…' : 'Creating account…' }}
+        } @else {
+          {{ mode() === 'login' ? 'Log in' : 'Register' }}
+        }
       </button>
-      <button mat-button type="button" (click)="toggleMode()">
+      <button mat-button type="button" (click)="toggleMode()" [disabled]="loading()">
         {{ mode() === 'login' ? 'Need an account? Register' : 'Have an account? Log in' }}
       </button>
     </form>
