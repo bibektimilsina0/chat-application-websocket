@@ -1,29 +1,35 @@
-import { Injectable, effect, inject, signal } from '@angular/core';
+import { Injectable, InjectionToken, effect, inject, signal } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
-import { io } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
 import { API_URL } from './config';
 import { AuthService } from './auth.service';
 import { Ack } from './models';
 
+/** Lets tests provide a fake socket instead of opening a real connection. */
+export const SOCKET_FACTORY = new InjectionToken<() => Socket>('SOCKET_FACTORY', {
+  providedIn: 'root',
+  factory: () => () =>
+    io(API_URL, {
+      autoConnect: false, // components attach listeners before the connection opens
+      withCredentials: true, // browser sends the httpOnly cookies in the handshake
+      transports: ['websocket'],
+    }),
+});
+
 @Injectable({ providedIn: 'root' })
 export class SocketService {
   private auth = inject(AuthService);
-
-  // autoConnect:false lets components attach listeners before the connection opens
-  private socket = io(API_URL, {
-    autoConnect: false,
-    withCredentials: true, // browser sends the httpOnly cookies in the handshake
-    transports: ['websocket'],
-  });
+  private socket = inject(SOCKET_FACTORY)();
 
   readonly connected = signal(false);
   private authRetried = false;
 
   constructor() {
-        // Logged out (by button, or because the session died) -> close the socket
+    // Logged out (by button, or because the session died) -> close the socket
     effect(() => {
       if (!this.auth.user()) this.socket.disconnect();
     });
+
     this.socket.on('connect', () => {
       this.connected.set(true);
       this.authRetried = false;

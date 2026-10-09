@@ -144,20 +144,23 @@ export class ChatRoom implements OnInit, OnDestroy {
     if (m.room_id !== this.roomId) return;
     if (this.messages().some((x) => x.message_id === m.message_id)) return;
 
-    const mine = m.user_id === this.auth.user()?.id;
-    this.messages.update((cur) => [...cur, { ...m, isNew: !mine }]);
     if (m.kind === 'system') {
       this.messages.update((cur) => [...cur, m]);
       if (this.atBottom) this.scrollToBottom();
       return;
     }
+
+    const mine = m.user_id === this.auth.user()?.id;
+    this.messages.update((cur) => [...cur, { ...m, isNew: !mine }]);
+
     if (mine || this.atBottom) {
       this.scrollToBottom();
       if (!mine) setTimeout(() => this.clearNewFlags(), 3000);
     } else {
-      this.unread.update((n) => n + 1); // user is reading older messages
+      this.unread.update((n) => n + 1);
     }
   }
+
 
   private onRemoteTyping(t: TypingEvent) {
     if (t.room_id !== this.roomId) return;
