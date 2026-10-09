@@ -16,13 +16,18 @@ def create_app(config=Config,message_store=None):
     register_auth_middleware(app)
     socketio.init_app(app)
 
-    from .message_store import CassandraMessageStore
+    socketio.init_app(app)
 
-    app.extensions["message_store"] = message_store or CassandraMessageStore(
-        app.config["CASSANDRA_HOSTS"],
-        app.config["CASSANDRA_PORT"],
-        app.config["CASSANDRA_KEYSPACE"],
-    )
+    if message_store is None:
+        from .message_store import CassandraMessageStore
+
+        message_store = CassandraMessageStore(
+            app.config["CASSANDRA_HOSTS"],
+            app.config["CASSANDRA_PORT"],
+            app.config["CASSANDRA_KEYSPACE"],
+        )
+
+    app.extensions["message_store"] = message_store
     
     @app.get("/health")
     def health():
@@ -35,6 +40,10 @@ def create_app(config=Config,message_store=None):
     @jwt.unauthorized_loader
     def missing_token(reason):
         return jsonify(error="Missing or invalid token"), 401
+
+    @jwt.invalid_token_loader
+    def invalid_token(reason):
+        return jsonify(error="Invalid token"), 401
 
     @jwt.expired_token_loader
     def expired_token(header, payload):
