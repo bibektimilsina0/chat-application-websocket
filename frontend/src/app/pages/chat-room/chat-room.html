@@ -1,0 +1,70 @@
+<mat-toolbar>
+  <button mat-icon-button (click)="back()" aria-label="Back to rooms"><mat-icon>arrow_back</mat-icon></button>
+  <span>{{ roomName() || 'Room' }}</span>
+  <span class="spacer"></span>
+  <span class="status" [class.online]="socket.connected()">
+    {{ socket.connected() ? 'Connected' : 'Connecting…' }}
+  </span>
+</mat-toolbar>
+
+<div class="layout">
+  <section class="chat">
+    <div class="messages" #scroller (scroll)="onScroll()" role="log" aria-live="polite">
+      @if (!noMore() && messages().length) {
+        <button mat-button class="older" (click)="loadOlder()" [disabled]="loadingOlder()">
+          {{ loadingOlder() ? 'Loading…' : 'Load older messages' }}
+        </button>
+      }
+
+      @for (m of messages(); track m.message_id) {
+        <div class="msg" [class.mine]="m.user_id === auth.user()?.id" [class.new]="m.isNew">
+          <div class="meta">
+            <strong>{{ m.username }}</strong>
+            <span>{{ m.created_at | date: 'shortTime' }}</span>
+          </div>
+          <div class="content">{{ m.content }}</div>
+        </div>
+      } @empty {
+        @if (noMore()) {
+          <p class="empty">No messages yet. Say hello!</p>
+        }
+      }
+    </div>
+
+    @if (unread() > 0) {
+      <button mat-flat-button class="jump" (click)="jumpToLatest()">↓ {{ unread() }} new</button>
+    }
+
+    <div class="typing" aria-live="polite">{{ typingText() }}</div>
+
+    <div class="composer">
+      <mat-form-field appearance="outline" class="grow" subscriptSizing="dynamic">
+        <mat-label>Message</mat-label>
+        <input
+          matInput
+          maxlength="2000"
+          autocomplete="off"
+          [ngModel]="draft()"
+          (ngModelChange)="draft.set($event)"
+          (input)="onInput()"
+          (keydown.enter)="send()"
+        />
+      </mat-form-field>
+      <button mat-flat-button (click)="send()" [disabled]="!draft().trim() || sending() || !socket.connected()">
+        Send
+      </button>
+    </div>
+  </section>
+
+  <aside class="people">
+    <h3>Online ({{ online().length }})</h3>
+    <ul>
+      @for (u of online(); track u.id) {
+        <li>
+          <span class="dot"></span>{{ u.username }}
+          @if (u.id === auth.user()?.id) { <em>(you)</em> }
+        </li>
+      }
+    </ul>
+  </aside>
+</div>

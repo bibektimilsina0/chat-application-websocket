@@ -1,1 +1,34 @@
-<p>rooms works!</p>
+<mat-toolbar>
+  <span>Chat rooms</span>
+  <span class="spacer"></span>
+  <span class="who">{{ auth.user()?.username }}</span>
+  <button mat-button (click)="auth.logout()">Logout</button>
+</mat-toolbar>
+
+<main class="wrap">
+  <form class="create" (ngSubmit)="create()">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>New room name</mat-label>
+      <input matInput name="roomName" maxlength="80" [ngModel]="newName()" (ngModelChange)="newName.set($event)" />
+    </mat-form-field>
+    <button mat-flat-button type="submit" [disabled]="!newName().trim() || creating()">Create</button>
+  </form>
+
+  @if (loading()) {
+    <p class="hint">Loading rooms…</p>
+  } @else if (!rooms().length) {
+    <p class="hint">No rooms yet. Create the first one above.</p>
+  } @else {
+    <mat-list>
+      @for (r of rooms(); track r.id) {
+        <mat-list-item>
+          <span matListItemTitle>{{ r.name }}</span>
+          <span matListItemLine>{{ r.member_count }} {{ r.member_count === 1 ? 'member' : 'members' }}</span>
+          <button matListItemMeta mat-stroked-button (click)="open(r)">
+            {{ r.is_member ? 'Open' : 'Join' }}
+          </button>
+        </mat-list-item>
+      }
+    </mat-list>
+  }
+</main>
