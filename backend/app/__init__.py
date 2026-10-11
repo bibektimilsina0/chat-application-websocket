@@ -4,7 +4,7 @@ from flask_cors import CORS
 from .config import Config
 from .extensions import db, jwt, migrate, socketio
 
-def create_app(config=Config,message_store=None):
+def create_app(config=Config, message_store=None, file_store=None):
     app = Flask(__name__)
     app.config.from_object(config)
 
@@ -28,7 +28,16 @@ def create_app(config=Config,message_store=None):
         )
 
     app.extensions["message_store"] = message_store
-    
+    from .file_store import MinioFileStore
+
+    app.extensions["file_store"] = file_store or MinioFileStore(
+        app.config["MINIO_ENDPOINT"], app.config["MINIO_ACCESS_KEY"],
+        app.config["MINIO_SECRET_KEY"], app.config["MINIO_SECURE"], app.config["MINIO_BUCKET"],
+    )
+
+    @app.errorhandler(413)
+    def too_large(e):
+        return jsonify(error="File is too large (max 10 MB)"), 413
     @app.get("/health")
     def health():
         return {"status": "ok"}

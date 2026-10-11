@@ -15,7 +15,7 @@ import { MessageService } from '../../core/message.service';
 import { SocketService } from '../../core/socket.service';
 import { ChatMessage, PresenceEvent, PresenceUser, TypingEvent } from '../../core/models';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-
+import { HttpEventType } from '@angular/common/http'
 const PAGE_SIZE = 30;
 const TYPING_STOP_MS = 2000; // I stop typing after 2s of silence
 const TYPING_EXPIRE_MS = 5000; // forget a remote "typing" if no update arrives
@@ -210,7 +210,44 @@ export class ChatRoom implements OnInit, OnDestroy {
       this.snack.open(ack.error ?? 'Message not sent', 'OK', { duration: 4000 });
     }
   }
+  uploadPercent = signal<number | null>(null);
 
+  onFilePicked(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // lets the user pick the same file again later
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      this.snack.open('File is too large (max 10 MB)', 'OK', { duration: 4000 });
+      return;
+    }
+
+    this.uploadPercent.set(0);
+    this.messagesApi.upload(this.roomId, file).subscribe({
+      next: (ev) => {
+        if (ev.type === HttpEventType.UploadProgress && ev.total) {
+          this.uploadPercent.set(Math.round((100 * ev.loaded) / ev.total));
+        } else if (ev.type === HttpEventType.Response) {
+          this.uploadPercent.set(null); // the message itself arrives over the socket
+        }
+      },
+      error: (e) => {
+        this.uploadPercent.set(null);
+        this.snack.open(e.error?.error ?? 'Upload failed', 'OK', { duration: 4000 });
+      },
+    });
+  }
+
+  fileUrl(m: ChatMessage) {
+    return this.messagesApi.fileUrl(this.roomId, m.file!.key, m.file!.name);
+  }
+
+  formatSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
   // ---------- scrolling and pagination ----------
 
   onScroll() {

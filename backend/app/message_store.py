@@ -42,23 +42,26 @@ class CassandraMessageStore:
                     username text,
                     content text,
                     kind text,
+                    file_key text,
+                    file_type text,
+                    file_size int,
                     PRIMARY KEY ((room_id), message_id)
                 ) WITH CLUSTERING ORDER BY (message_id DESC)
                 """
             )
-            try:  # tables created before `kind` existed
-                session.execute("ALTER TABLE messages ADD kind text")
-            except InvalidRequest:
-                pass  # column already there
+            for column in ("kind text", "file_key text", "file_type text", "file_size int"):
+                try:  # upgrades tables created before these columns existed
+                    session.execute(f"ALTER TABLE messages ADD {column}")
+                except InvalidRequest:
+                    pass
 
             self._insert = session.prepare(
-                "INSERT INTO messages (room_id, message_id, user_id, username, content, kind) "
-                "VALUES (?, ?, ?, ?, ?, ?)"
+                "INSERT INTO messages (room_id, message_id, user_id, username, content, kind, "
+                "file_key, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
-            cols = "room_id, message_id, user_id, username, content, kind"
-            self._latest = session.prepare(
-                f"SELECT {cols} FROM messages WHERE room_id = ? LIMIT ?"
-            )
+            cols = ("room_id, message_id, user_id, username, content, kind, "
+                    "file_key, file_type, file_size")
+            self._latest = session.prepare(f"SELECT {cols} FROM messages WHERE room_id = ? LIMIT ?")
             self._older = session.prepare(
                 f"SELECT {cols} FROM messages WHERE room_id = ? AND message_id < ? LIMIT ?"
             )
@@ -71,16 +74,24 @@ class CassandraMessageStore:
             "room_id": row.room_id,
             "user_id": row.user_id,
             "username": row.username,
-            "content": row.content,
-            "kind": row.kind or "message",  # old rows have no kind
+            "content": row.content,  # for files: the original file name
+            "kind": row.kind or "message",
+            "file": (
+                {"name": row.content, "key": row.file_key, "type": row.file_type, "size": row.file_size}
+                if row.file_key else None
+            ),
             "created_at": _created_at(row.message_id),
         }
 
-    def add(self, room_id, user_id, username, content, kind="message"):
+    def add(self, room_id, user_id, username, content, kind="message", file=None):
+        """`file` is {"key", "type", "size"} for kind="file" messages."""
         self._ensure()
         message_id = uuid_from_time(datetime.now(timezone.utc))
+        f = file or {}
         self._session.execute(
-            self._insert, (room_id, message_id, user_id, username, content, kind)
+            self._insert,
+            (room_id, message_id, user_id, username, content, kind,
+             f.get("key"), f.get("type"), f.get("size")),
         )
         return {
             "message_id": str(message_id),
@@ -89,9 +100,9 @@ class CassandraMessageStore:
             "username": username,
             "content": content,
             "kind": kind,
+            "file": {"name": content, **f} if file else None,
             "created_at": _created_at(message_id),
         }
-
     def history(self, room_id, limit=30, before=None):
         """Return up to `limit` messages, oldest first. `before` is a message_id UUID."""
         self._ensure()

@@ -51,7 +51,11 @@ describe('ChatRoom', () => {
         ? throwError(() => new HttpErrorResponse({ status: 404, error: { error: 'Room not found' } }))
         : of({ id: 7, name: 'general', member_count: 2, is_member: true }),
     );
-    messages = jasmine.createSpyObj<MessageService>('MessageService', ['history']);
+    messages = jasmine.createSpyObj<MessageService>('MessageService', ['history', 'upload', 'fileUrl']);
+    messages.fileUrl.and.callFake(
+      (room: number, key: string, name: string) =>
+        `/rooms/${room}/files/${key}?filename=${encodeURIComponent(name)}`,
+    );
     messages.history.and.callFake((_room: number, before?: string) => of(before ? older : latest));
     router = jasmine.createSpyObj<Router>('Router', ['navigate']);
     snack = jasmine.createSpyObj<MatSnackBar>('MatSnackBar', ['open']);
@@ -84,14 +88,17 @@ describe('ChatRoom', () => {
   const qa = (sel: string) => Array.from(el.querySelectorAll(sel)) as HTMLElement[];
   const texts = (sel: string) => qa(sel).map((e) => e.textContent!.trim());
 
+  // The composer also contains the hidden file picker and the paperclip button,
+  // so these selectors must skip them.
+  const messageField = () => q('.composer input:not([type="file"])') as HTMLInputElement;
+  const sendButton = () => q('.composer button[mat-flat-button]') as HTMLButtonElement;
+
   function type(value: string) {
-    const field = q('.composer input') as HTMLInputElement;
+    const field = messageField();
     field.value = value;
     field.dispatchEvent(new Event('input'));
     fixture.detectChanges();
   }
-
-  const sendButton = () => q('.composer button') as HTMLButtonElement;
 
   function useClock() {
     jasmine.clock().install();
@@ -141,7 +148,11 @@ describe('ChatRoom', () => {
 
   describe('message history', () => {
     it('renders stored messages, including system notices', async () => {
-      const history = [msg({ content: 'hello' }), systemMsg('carol joined the room'), msg({ content: 'hi there', user_id: 1, username: 'alice' })];
+      const history = [
+        msg({ content: 'hello' }),
+        systemMsg('carol joined the room'),
+        msg({ content: 'hi there', user_id: 1, username: 'alice' }),
+      ];
       await setup({ latest: history });
 
       expect(texts('.msg .content')).toEqual(['hello', 'hi there']);
@@ -181,6 +192,32 @@ describe('ChatRoom', () => {
       expect(contents.length).toBe(35);
       expect(contents.slice(0, 5)).toEqual(older.map((m) => m.content));
       expect(q('.older')).toBeNull(); // a short page means we reached the beginning
+    });
+
+    it('shows an image attachment as a picture', async () => {
+      const file = { name: 'cat.png', key: 'a'.repeat(32) + '.png', type: 'image/png', size: 2048 };
+      await setup({ latest: [msg({ kind: 'file', content: 'cat.png', file })] });
+
+      const img = q('.msg img.thumb') as HTMLImageElement;
+      expect(img.src).toContain(`/rooms/7/files/${file.key}`);
+      expect(img.alt).toBe('cat.png');
+    });
+
+    it('shows other attachments as a download link with the size', async () => {
+      const file = { name: 'report.pdf', key: 'b'.repeat(32) + '.pdf', type: 'application/pdf', size: 3 * 1024 * 1024 };
+      await setup({ latest: [msg({ kind: 'file', content: 'report.pdf', file })] });
+
+      expect(q('.msg a.file')!.textContent).toContain('report.pdf');
+      expect(q('.msg a.file')!.textContent).toContain('3.0 MB');
+    });
+
+    it('refuses oversized files before uploading', async () => {
+      await setup();
+      const big = new File([new ArrayBuffer(11 * 1024 * 1024)], 'big.zip');
+      component.onFilePicked({ target: { files: [big], value: '' } } as unknown as Event);
+
+      expect(snack.open).toHaveBeenCalledWith('File is too large (max 10 MB)', 'OK', jasmine.anything());
+      expect(messages.upload).not.toHaveBeenCalled();
     });
   });
 
@@ -260,7 +297,7 @@ describe('ChatRoom', () => {
 
     it('sends on Enter', async () => {
       type('with enter');
-      (q('.composer input') as HTMLInputElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+      messageField().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
       await settle();
 
       expect(socket.emitted.some((e) => e.event === 'send_message')).toBeTrue();

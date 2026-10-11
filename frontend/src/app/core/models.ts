@@ -11,11 +11,17 @@ export interface ChatMessage {
   user_id: number;
   username: string;
   content: string;
-  kind?: 'message' | 'system';
+  kind?: 'message' | 'system' | 'file';
+  file?: FileInfo | null;
   created_at: string;
   isNew?: boolean;
 }
-
+export interface FileInfo {
+  name: string;
+  key: string;
+  type: string;
+  size: number;
+}
 export interface RoomChange {
   id: number;
   name: string;

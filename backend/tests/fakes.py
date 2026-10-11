@@ -6,7 +6,7 @@ class InMemoryMessageStore:
     def __init__(self):
         self._rooms = {}
 
-    def add(self, room_id, user_id, username, content, kind="message"):
+    def add(self, room_id, user_id, username, content, kind="message", file=None):
         message = {
             "message_id": str(uuid.uuid1()),
             "room_id": room_id,
@@ -14,6 +14,7 @@ class InMemoryMessageStore:
             "username": username,
             "content": content,
             "kind": kind,
+            "file": {"name": content, **file} if file else None,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self._rooms.setdefault(room_id, []).append(message)
@@ -27,3 +28,18 @@ class InMemoryMessageStore:
             if str(before) in ids:
                 messages = messages[: ids.index(str(before))]
         return messages[-limit:]
+
+class InMemoryFileStore:
+    def __init__(self):
+        self.objects = {}
+
+    def put(self, key, stream, length, content_type):
+        self.objects[key] = stream.read()
+
+    def get(self, key):
+        if key not in self.objects:
+            raise FileNotFoundError(key)
+        return iter([self.objects[key]]), len(self.objects[key])
+
+    def delete(self, key):
+        self.objects.pop(key, None)

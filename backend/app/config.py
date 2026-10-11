@@ -28,6 +28,15 @@ class Config:
     CASSANDRA_PORT = int(os.getenv("CASSANDRA_PORT", "9042"))
     CASSANDRA_KEYSPACE = os.getenv("CASSANDRA_KEYSPACE", "chat")
 
+    # minio
+    MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+    MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+    MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
+    MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
+    MINIO_BUCKET = os.getenv("MINIO_BUCKET", "chat-files")
+    MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+    MAX_CONTENT_LENGTH = MAX_UPLOAD_BYTES + 1024 * 1024  # Flask rejects bigger bodies early
+
 class TestConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = os.getenv(

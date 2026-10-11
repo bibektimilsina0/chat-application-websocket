@@ -6,9 +6,11 @@
     {{ socket.connected() ? 'Connected' : 'Connecting…' }}
   </span>
 </mat-toolbar>
+
 @if (!ready()) {
   <mat-progress-bar mode="indeterminate" />
 }
+
 <div class="layout">
   <section class="chat">
     <div class="messages" #scroller (scroll)="onScroll()" role="log" aria-live="polite">
@@ -18,7 +20,7 @@
         </button>
       }
 
-    @for (m of messages(); track m.message_id) {
+      @for (m of messages(); track m.message_id) {
         @if (m.kind === 'system') {
           <div class="system">{{ m.content }}</div>
         } @else {
@@ -27,7 +29,22 @@
               <strong>{{ m.username }}</strong>
               <span>{{ m.created_at | date: 'shortTime' }}</span>
             </div>
-            <div class="content">{{ m.content }}</div>
+
+            @if (m.kind === 'file' && m.file) {
+              @if (m.file.type.startsWith('image/')) {
+                <a [href]="fileUrl(m)" target="_blank" rel="noopener">
+                  <img class="thumb" [src]="fileUrl(m)" [alt]="m.file.name" loading="lazy" />
+                </a>
+              } @else {
+                <a class="file" [href]="fileUrl(m)" target="_blank" rel="noopener">
+                  <mat-icon>description</mat-icon>
+                  <span>{{ m.file.name }}</span>
+                  <small>({{ formatSize(m.file.size) }})</small>
+                </a>
+              }
+            } @else {
+              <div class="content">{{ m.content }}</div>
+            }
           </div>
         }
       } @empty {
@@ -43,7 +60,30 @@
 
     <div class="typing" aria-live="polite">{{ typingText() }}</div>
 
+    @if (uploadPercent() !== null) {
+      <mat-progress-bar mode="determinate" [value]="uploadPercent()!" />
+    }
+
     <div class="composer">
+      <!-- The file picker and the paperclip live OUTSIDE mat-form-field,
+           which can only hold a single control and would overlap them with the label. -->
+      <input
+        #picker
+        type="file"
+        hidden
+        accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.csv,.zip"
+        (change)="onFilePicked($event)"
+      />
+      <button
+        mat-icon-button
+        type="button"
+        aria-label="Attach file"
+        (click)="picker.click()"
+        [disabled]="uploadPercent() !== null || !socket.connected()"
+      >
+        <mat-icon>attach_file</mat-icon>
+      </button>
+
       <mat-form-field appearance="outline" class="grow" subscriptSizing="dynamic">
         <mat-label>Message</mat-label>
         <input
@@ -56,6 +96,7 @@
           (keydown.enter)="send()"
         />
       </mat-form-field>
+
       <button mat-flat-button (click)="send()" [disabled]="!draft().trim() || sending() || !socket.connected()">
         Send
       </button>
