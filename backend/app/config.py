@@ -17,7 +17,8 @@ class Config:
     JWT_REFRESH_COOKIE_NAME = "refresh_token"
     JWT_REFRESH_COOKIE_PATH = "/"         
     JWT_SESSION_COOKIE = False             # cookie lifetime = token lifetime
-    JWT_COOKIE_SECURE = False              # True in production (HTTPS)
+    JWT_COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"  # true behind HTTPS
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:4200").split(",")             # True in production (HTTPS)
     JWT_COOKIE_SAMESITE = "Lax"
     JWT_COOKIE_CSRF_PROTECT = False  
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)

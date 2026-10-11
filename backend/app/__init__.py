@@ -8,15 +8,18 @@ def create_app(config=Config, message_store=None, file_store=None):
     app = Flask(__name__)
     app.config.from_object(config)
 
-    CORS(app, supports_credentials=True, origins=["http://localhost:4200"])
+    CORS(app, supports_credentials=True, origins=app.config["CORS_ORIGINS"])
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
     from .middleware import register_auth_middleware
     register_auth_middleware(app)
-    socketio.init_app(app)
+    socketio.init_app(
+    app,
+    cors_allowed_origins=app.config["CORS_ORIGINS"],
+    async_mode="threading",
+    )
 
-    socketio.init_app(app)
 
     if message_store is None:
         from .message_store import CassandraMessageStore

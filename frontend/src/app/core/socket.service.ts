@@ -1,7 +1,7 @@
 import { Injectable, InjectionToken, effect, inject, signal } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
 import { io, Socket } from 'socket.io-client';
-import { API_URL } from './config';
+import { SOCKET_PATH, SOCKET_URL } from './config';
 import { AuthService } from './auth.service';
 import { Ack } from './models';
 
@@ -9,9 +9,10 @@ import { Ack } from './models';
 export const SOCKET_FACTORY = new InjectionToken<() => Socket>('SOCKET_FACTORY', {
   providedIn: 'root',
   factory: () => () =>
-    io(API_URL, {
-      autoConnect: false, // components attach listeners before the connection opens
-      withCredentials: true, // browser sends the httpOnly cookies in the handshake
+    io(SOCKET_URL, {
+      path: SOCKET_PATH,
+      autoConnect: false,
+      withCredentials: true,
       transports: ['websocket'],
     }),
 });

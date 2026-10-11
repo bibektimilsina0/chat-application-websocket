@@ -6,86 +6,101 @@ Chat rooms with instant messaging over WebSockets, message history, typing indic
 
 ## Architecture
 
-```
+```text
 Angular (4200) ──REST + cookies──▶ Flask (5000) ──▶ PostgreSQL  users, rooms, memberships, refresh tokens
        └────────Socket.IO────────▶    └──────────▶ Cassandra   messages (partition: room_id, order: time-based UUID)
 ```
 
-- **Auth:** access and refresh JWTs live in `HttpOnly` cookies. Middleware silently refreshes an expired access token using the refresh cookie, and refresh tokens rotate on every use. `/auth/refresh` exists for manual use but the frontend never calls it.
-- **Real time:** the socket authenticates from the same cookie during the handshake. Joining a room requires membership.
-- **Messages:** stored in Cassandra, loaded 30 at a time (newest first) with `before=<message_id>` pagination.
+- **Auth:** Access and refresh JWTs live in `HttpOnly` cookies. Middleware silently refreshes an expired access token using the refresh cookie, and refresh tokens rotate on every use. `/auth/refresh` exists for manual use but the frontend never calls it.
+- **Real time:** The socket authenticates from the same cookie during the handshake. Joining a room requires membership.
+- **Messages:** Stored in Cassandra, loaded 30 at a time with `before=<message_id>` pagination.
 
 ## Setup
 
 Requires Docker, Python 3.11+, Node 20+ and Angular CLI.
 
 ```powershell
-# 1. Databases (PostgreSQL + Cassandra). Cassandra takes ~1 minute to boot.
+# 1. Start databases (PostgreSQL + Cassandra)
 docker compose up -d
 
-# 2. Backend
+# 2. Configure and start the backend
 cd backend
+Copy-Item .env.example .env
+# Edit .env with your local settings
+
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
-flask --app run db upgrade        # create tables
-python run.py                     # http://localhost:5000
-
-# 3. Frontend (new terminal)
-cd frontend
-npm install
-ng serve                          # http://localhost:4200
+flask --app run db upgrade
+python run.py
 ```
 
-Settings go in `backend/.env` (`SECRET_KEY`, `JWT_SECRET_KEY`, `DATABASE_URL`). Open the app at `http://localhost:4200`, not `127.0.0.1`, or the cookies will be dropped.
+Open a **new terminal** for the frontend:
+
+```powershell
+cd frontend
+npm install
+ng serve
+```
+
+Open the app at [http://localhost:4200](http://localhost:4200). Use `localhost` consistently rather than switching to `127.0.0.1`, so cookie behavior matches your configured frontend origin.
 
 ## Tests
 
+### Backend
+
+Requires the PostgreSQL container to be running. Create the test database once:
+
 ```powershell
-# Backend (needs the PostgreSQL container running)
-docker exec -it chat_postgres psql -U chat -d chat -c "CREATE DATABASE chat_test;"   # once
+docker exec -it chat_postgres psql -U chat -d chat -c "CREATE DATABASE chat_test;"
 cd backend
 pytest -v
-
-# Frontend (Jasmine + Karma)
-cd frontend
-ng test --no-watch --browsers=ChromeHeadless
 ```
 
 Backend tests use a separate PostgreSQL database and a fake message store, so they don't need Cassandra.
+
+### Frontend
+
+Uses Jasmine and Karma:
+
+```powershell
+cd frontend
+ng test --no-watch --browsers=ChromeHeadless
+```
 
 ## REST API
 
 | Method | Endpoint | Description |
 |---|---|---|
 | POST | `/auth/register` | Create a user |
-| POST | `/auth/login` | Log in, sets the cookies |
+| POST | `/auth/login` | Log in and set cookies |
 | POST | `/auth/refresh` | Rotate tokens manually |
-| POST | `/auth/logout` | Revoke the refresh token, clear cookies |
-| GET | `/auth/me` | Current user |
-| GET | `/rooms` | List rooms (member counts, my membership) |
-| POST | `/rooms/create` | Create a room (creator joins) |
+| POST | `/auth/logout` | Revoke the refresh token and clear cookies |
+| GET | `/auth/me` | Get the current user |
+| GET | `/rooms` | List rooms with member counts and membership status |
+| POST | `/rooms/create` | Create a room; creator joins automatically |
 | POST | `/rooms/{id}/join` | Join a room (idempotent) |
-| GET | `/rooms/{id}/messages?limit=&before=` | Message history, oldest first |
+| GET | `/rooms/{id}/messages?limit=&before=` | Retrieve message history with pagination |
 
 All POST requests must send `X-Requested-With: XMLHttpRequest`.
 
-## WebSocket events
+## WebSocket Events
 
 | Event | Direction | Payload | Notes |
 |---|---|---|---|
-| `connect` / `disconnect` | built in | cookie | refused with `unauthorized` if the token is invalid |
-| `join_room` / `leave_room` | client → server | `{room_id}` | ack `{ok, error?}` |
-| `send_message` | client → server | `{room_id, content}` | ack `{ok, message_id?, error?}` |
-| `receive_message` | server → room | message | includes "X joined the room" system messages |
-| `typing` | both | `{room_id, is_typing}` | sent to others only |
-| `presence` | server → room | `{room_id, users[]}` | on join, leave and disconnect |
-| `room_changed` | server → all | `{id, name, member_count}` | live room list |
+| `connect` / `disconnect` | Built-in | Cookie | Connection is refused if authentication fails |
+| `join_room` / `leave_room` | Client → server | `{room_id}` | Acknowledgment: `{ok, error?}` |
+| `send_message` | Client → server | `{room_id, content}` | Acknowledgment: `{ok, message_id?, error?}` |
+| `receive_message` | Server → room | Message | Includes system messages, such as users joining |
+| `typing` | Both | `{room_id, is_typing}` | Sent to other users |
+| `presence` | Server → room | `{room_id, users[]}` | Updated on join, leave and disconnect |
+| `room_changed` | Server → all | `{id, name, member_count}` | Live room list updates |
 
-## Design notes
+## Design Notes
 
-- PostgreSQL enforces integrity (foreign keys, unique room names and memberships). Cassandra holds only messages, with the username denormalised into each row.
-- CSRF defence: `SameSite=Lax` cookies, CORS limited to the Angular origin, and a required custom header on unsafe methods.
-- Presence is kept in server memory, so it only works with one server process. To scale out, move it to Redis and use a Socket.IO message queue.
-- Very busy rooms would need Cassandra partitions bucketed by day (`room_id, day`).
-- Not implemented: read receipts, file uploads, deployment.
+- PostgreSQL enforces relational integrity through foreign keys and unique constraints for room names and memberships.
+- Cassandra stores messages, with usernames denormalized into message rows.
+- **CSRF defence:** `SameSite=Lax` cookies, restricted CORS origins and a required custom header on unsafe requests.
+- Presence is stored in server memory, so it supports only a single server process. Scaling out requires Redis and a Socket.IO message queue.
+- Very busy rooms may eventually require Cassandra partitions bucketed by day (`room_id`, `day`).
+- Bonus features: file uploads (MinIO, served through the API so only room members can read them) and Docker deployment (`docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build`, then open http://localhost:8080). Not implemented: read receipts.

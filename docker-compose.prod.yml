@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env.prod}
+      POSTGRES_DB: chat
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chat -d chat"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  cassandra:
+    image: cassandra:4.1
+    environment:
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 128M
+    volumes:
+      - cassandradata:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
+
+  minio:
+    image: pgsty/minio:RELEASE.2026-06-18T00-00-00Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set it in .env.prod}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set it in .env.prod}
+    volumes:
+      - miniodata:/data
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    environment:
+      SECRET_KEY: ${SECRET_KEY:?set it in .env.prod}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set it in .env.prod}
+      DATABASE_URL: postgresql+psycopg://chat:${POSTGRES_PASSWORD}@postgres:5432/chat
+      CASSANDRA_HOSTS: cassandra
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  cassandradata:
+  miniodata:
