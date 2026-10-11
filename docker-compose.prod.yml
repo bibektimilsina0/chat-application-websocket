@@ -1,3 +1,5 @@
+name: chat-prod  
+
 services:
   postgres:
     image: postgres:16
@@ -41,6 +43,8 @@ services:
 
   backend:
     build: ./backend
+    ports:
+      - "5000:5000"   # the browser talks to Flask directly (no nginx)
     environment:
       SECRET_KEY: ${SECRET_KEY:?set it in .env.prod}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?set it in .env.prod}
@@ -49,7 +53,7 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
     depends_on:
       postgres:
@@ -63,7 +67,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "8080:80"
+      - "4200:4200"
     depends_on:
       - backend
     restart: unless-stopped
